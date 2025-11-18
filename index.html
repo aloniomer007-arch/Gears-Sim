@@ -1,0 +1,279 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/png" href="favicon.png" />
+<title>Gear Countdown to Graduation</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        font-family: 'Courier New', monospace;
+        background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+        color: #fff;
+        overflow-x: hidden;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+        min-height: 100vh;
+    }
+    .countdown { text-align: center; margin-bottom: 30px; z-index: 10; }
+    .countdown h1 { font-size: 2em; margin-bottom: 20px; color: #ffd700; text-shadow: 0 0 20px rgba(255,215,0,0.5); }
+    .time-display { display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; }
+    .time-unit {
+        background: rgba(255,255,255,0.1);
+        padding: 15px 25px;
+        border-radius: 10px;
+        backdrop-filter: blur(10px);
+        border: 2px solid rgba(255,215,0,0.3);
+    }
+    .time-value { font-size: 2em; font-weight: bold; color: #ffd700; display: block; }
+    .time-label { font-size: 0.8em; color: #bbb; text-transform: uppercase; letter-spacing: 2px; }
+    canvas {
+        border: 2px solid rgba(255,215,0,0.3);
+        border-radius: 10px;
+        background: rgba(0,0,0,0.3);
+        box-shadow: 0 0 30px rgba(0,0,0,0.5);
+    }
+    .celebration {
+        display: none;
+        position: fixed;
+        top: 50%; left: 50%; transform: translate(-50%, -50%);
+        background: linear-gradient(135deg,#667eea,#764ba2);
+        padding: 50px; border-radius: 20px; text-align: center;
+        z-index: 1000;
+        box-shadow: 0 0 50px rgba(102,126,234,0.8);
+        animation: celebration-appear 1s ease-out;
+    }
+    @keyframes celebration-appear {
+        from { transform: translate(-50%,-50%) scale(0); opacity: 0;}
+        to { transform: translate(-50%,-50%) scale(1); opacity: 1; }
+    }
+    .celebration h2 { font-size: 3em; margin-bottom: 20px; color: #ffd700; text-shadow: 0 0 30px rgba(255,215,0,0.8); }
+    .celebration p { font-size: 1.5em; color: #fff; }
+</style>
+</head>
+<body>
+<div class="countdown">
+    <h1>COUNTDOWN TO GRADUATION - JUNE 20, 2027</h1>
+    <div class="time-display">
+        <div class="time-unit"><span class="time-value" id="years">0</span><span class="time-label">Years</span></div>
+        <div class="time-unit"><span class="time-value" id="days">0</span><span class="time-label">Days</span></div>
+        <div class="time-unit"><span class="time-value" id="hours">0</span><span class="time-label">Hours</span></div>
+        <div class="time-unit"><span class="time-value" id="minutes">0</span><span class="time-label">Minutes</span></div>
+        <div class="time-unit"><span class="time-value" id="seconds">0</span><span class="time-label">Seconds</span></div>
+    </div>
+</div>
+
+<canvas id="gearCanvas"></canvas>
+
+<div class="celebration" id="celebration">
+    <h2>🎉 Congratulations! 🎉</h2>
+    <p>You've finished school!</p>
+</div>
+
+<script>
+const canvas = document.getElementById('gearCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = 1350;
+canvas.height = 450;
+
+const targetDate = new Date('June 20, 2027 00:00:00').getTime();
+let celebrationShown = false;
+
+// ------------------ Persistent timing ------------------
+// Store the initial timestamp in localStorage if not already set
+const STORAGE_KEY = 'graduationCountdownStart';
+let initialTimestamp = localStorage.getItem(STORAGE_KEY);
+
+if (!initialTimestamp) {
+    initialTimestamp = Date.now();
+    localStorage.setItem(STORAGE_KEY, initialTimestamp);
+} else {
+    initialTimestamp = parseInt(initialTimestamp);
+}
+
+// ------------------ format time for labels ------------------
+function formatTime(seconds) {
+    if (seconds < 60) return `${seconds.toFixed(2)} sec`;
+    if (seconds < 3600) return `${(seconds/60).toFixed(1)} min`;
+    if (seconds < 86400) return `${(seconds/3600).toFixed(1)} hours`;
+    return `${Math.floor(seconds/86400)} days`;
+}
+
+// ------------------ Gear class ------------------
+class Gear {
+    constructor(x, y, radius, teeth, rotationTime, color, label, direction) {
+        this.x = x; this.y = y;
+        this.radius = radius;
+        this.teeth = teeth;
+        this.rotationTime = rotationTime; // seconds per full rotation
+        this.angle = 0; // radians
+        this.color = color;
+        this.label = label;
+        this.direction = direction || 1;
+    }
+
+    update(deltaTime) {
+        const rt = Math.max(0.0001, this.rotationTime);
+        const anglePerSecond = (Math.PI * 2) / rt;
+        this.angle += anglePerSecond * deltaTime * this.direction;
+        if (this.angle > Math.PI * 2 || this.angle < -Math.PI * 2) {
+            this.angle %= (Math.PI * 2);
+        }
+    }
+
+    draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+
+        const innerR = this.radius - 10;
+        const outerR = this.radius;
+        ctx.beginPath();
+        for (let i = 0; i < this.teeth; i++) {
+            const a1 = (i / this.teeth) * Math.PI * 2;
+            const a2 = ((i + 0.5) / this.teeth) * Math.PI * 2;
+            if (i === 0) ctx.moveTo(Math.cos(a1)*innerR, Math.sin(a1)*innerR);
+            ctx.lineTo(Math.cos(a1)*innerR, Math.sin(a1)*innerR);
+            ctx.lineTo(Math.cos(a1)*outerR, Math.sin(a1)*outerR);
+            ctx.lineTo(Math.cos(a2)*outerR, Math.sin(a2)*outerR);
+            ctx.lineTo(Math.cos(a2)*innerR, Math.sin(a2)*innerR);
+        }
+        ctx.closePath();
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.strokeStyle = '#222';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 0.3, 0, Math.PI*2);
+        ctx.fillStyle = '#1a1a1a'; ctx.fill();
+        ctx.strokeStyle = '#666'; ctx.lineWidth = 2; ctx.stroke();
+
+        ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI*2); ctx.fillStyle = '#888'; ctx.fill();
+
+        ctx.restore();
+
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 13px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.label, this.x, this.y + this.radius + 25);
+    }
+}
+
+// ------------------ build gears ------------------
+const currentTime = Date.now();
+const totalSecondsToGraduation = (targetDate - initialTimestamp) / 1000;
+const elapsedSecondsSinceStart = (currentTime - initialTimestamp) / 1000;
+
+// build gear rotation times
+const gearRotationTimes = [];
+let t = totalSecondsToGraduation;
+while (gearRotationTimes.length < 12) {
+    if (t < 0.05) t = 0.05;
+    gearRotationTimes.unshift(t);
+    if (t === 0.05) break;
+    t /= 10;
+}
+
+// colors and positions
+const colors = ['#e74c3c','#e67e22','#f39c12','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e91e63','#ff5722','#795548','#ffd700'];
+const gears = [];
+const spacing = Math.min(200, (canvas.width - 200) / gearRotationTimes.length);
+const startX = (canvas.width - spacing * (gearRotationTimes.length - 1)) / 2;
+const yPos = canvas.height / 2;
+
+for (let i = 0; i < gearRotationTimes.length; i++) {
+    gears.push(new Gear(
+        startX + i * spacing,
+        yPos,
+        70,
+        16,
+        gearRotationTimes[i],
+        i === gearRotationTimes.length - 1 ? '#ffd700' : colors[i % colors.length],
+        formatTime(gearRotationTimes[i]),
+        i % 2 === 0 ? 1 : -1
+    ));
+}
+
+// ------------------ initialize gear angles based on elapsed time ------------------
+for (const g of gears) {
+    const rotationsElapsed = elapsedSecondsSinceStart / g.rotationTime;
+    g.angle = (rotationsElapsed % 1) * Math.PI * 2 * g.direction;
+}
+
+// ------------------ draw connections ------------------
+function drawConnections() {
+    ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    for (let i = 0; i < gears.length - 1; i++) {
+        ctx.beginPath();
+        ctx.moveTo(gears[i].x, gears[i].y);
+        ctx.lineTo(gears[i + 1].x, gears[i + 1].y);
+        ctx.stroke();
+    }
+    ctx.setLineDash([]);
+}
+
+// ------------------ countdown ------------------
+function updateCountdown() {
+    const now = Date.now();
+    const distance = targetDate - now;
+
+    if (distance < 0) {
+        if (!celebrationShown) {
+            document.getElementById('celebration').style.display = 'block';
+            celebrationShown = true;
+            // Clear the stored timestamp when countdown completes
+            localStorage.removeItem(STORAGE_KEY);
+        }
+        document.getElementById('years').textContent = '0';
+        document.getElementById('days').textContent = '0';
+        document.getElementById('hours').textContent = '0';
+        document.getElementById('minutes').textContent = '0';
+        document.getElementById('seconds').textContent = '0';
+        return;
+    }
+
+    const seconds = Math.floor(distance / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    const years = Math.floor(days / 365.25);
+
+    document.getElementById('years').textContent = years;
+    document.getElementById('days').textContent = days % 365;
+    document.getElementById('hours').textContent = hours % 24;
+    document.getElementById('minutes').textContent = minutes % 60;
+    document.getElementById('seconds').textContent = seconds % 60;
+}
+
+// ------------------ animation loop ------------------
+let lastRAF = performance.now();
+function animate(now) {
+    const delta = (now - lastRAF) / 1000;
+    lastRAF = now;
+
+    ctx.fillStyle = '#0a0818';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    updateCountdown();
+    drawConnections();
+
+    for (const g of gears) {
+        g.update(delta);
+        g.draw();
+    }
+
+    requestAnimationFrame(animate);
+}
+
+requestAnimationFrame(animate);
+</script>
+
+</body>
+</html>
